@@ -1,42 +1,41 @@
 //
-//  WSAssetTableViewController.m
-//  WSAssetPickerController
+// WSAssetTableViewController.m
+// WSAssetPickerController
 //
-//  Created by Wesley Smith on 5/12/12.
-//  Copyright (c) 2012 Wesley D. Smith. All rights reserved.
+// Created by Wesley Smith on 5/12/12.
+// Copyright (c) 2012 Wesley D. Smith. All rights reserved.
 //
-//  Licensed under the Apache License, Version 2.0 (the "License");
-//  you may not use this file except in compliance with the License.
-//  You may obtain a copy of the License at
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//  http://www.apache.org/licenses/LICENSE-2.0
+// http://www.apache.org/licenses/LICENSE-2.0
 //
-//  Unless required by applicable law or agreed to in writing, software
-//  distributed under the License is distributed on an "AS IS" BASIS,
-//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  See the License for the specific language governing permissions and
-//  limitations under the License.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #import "WSAssetTableViewController.h"
 #import "WSAssetPickerState.h"
 #import "WSAssetsTableViewCell.h"
 #import "WSAssetWrapper.h"
 
-#define ASSET_WIDTH_WITH_PADDING 79.0f
+#define ASSET_PER_ROW 4
 
 @interface WSAssetTableViewController () <WSAssetsTableViewCellDelegate>
 @property (nonatomic, strong) NSMutableArray *fetchedAssets;
 @property (nonatomic, readonly) NSInteger assetsPerRow;
+@property (nonatomic, strong) WSAssetsTableViewCell *prototypeCell;
 @end
-
 
 @implementation WSAssetTableViewController
 
 @synthesize assetPickerState = _assetPickerState;
 @synthesize assetsGroup = _assetsGroup;
 @synthesize fetchedAssets = _fetchedAssets;
-@synthesize assetsPerRow =_assetsPerRow;
-
+@synthesize assetsPerRow = _assetsPerRow;
 
 #pragma mark - View Lifecycle
 
@@ -67,26 +66,25 @@
     [super viewWillDisappear:animated];
 }
 
-
 - (void)viewDidLoad
 {
     self.navigationItem.title = @"Loading";
     
-	self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone 
-                                                                                           target:self 
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                                                                                           target:self
                                                                                            action:@selector(doneButtonAction:)];
-    
     
     // TableView configuration.
     self.tableView.contentInset = TABLEVIEW_INSETS;
     self.tableView.separatorColor = [UIColor clearColor];
     self.tableView.allowsSelection = NO;
     
+    static NSString *AssetCellIdentifier = @"WSAssetCell";
+    self.prototypeCell = [[WSAssetsTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:AssetCellIdentifier];
     
     // Fetch the assets.
     [self fetchAssets];
 }
-
 
 #pragma mark - Getters
 
@@ -100,7 +98,7 @@
 
 - (NSInteger)assetsPerRow
 {
-    return MAX(1, (NSInteger)floorf(self.tableView.contentSize.width / ASSET_WIDTH_WITH_PADDING));
+    return ASSET_PER_ROW;
 }
 
 #pragma mark - Rotation
@@ -115,21 +113,17 @@
     [self.tableView reloadData];
 }
 
-
 #pragma mark - Fetching Code
 
 - (void)fetchAssets
 {
-    // TODO: Listen to ALAssetsLibrary changes in order to update the library if it changes. 
+    // TODO: Listen to ALAssetsLibrary changes in order to update the library if it changes.
     // (e.g. if user closes, opens Photos and deletes/takes a photo, we'll get out of range/other error when they come back.
     // IDEA: Perhaps the best solution, since this is a modal controller, is to close the modal controller.
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        
-        [self.assetsGroup enumerateAssetsWithOptions:NSEnumerationReverse usingBlock:^(ALAsset *result, NSUInteger index, BOOL *stop) {
-            
+        [self.assetsGroup enumerateAssetsWithOptions:NSEnumerationReverse usingBlock: ^(ALAsset *result, NSUInteger index, BOOL *stop) {
             if (!result || index == NSNotFound) {
-                
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self.tableView reloadData];
                     self.navigationItem.title = [NSString stringWithFormat:@"%@", [self.assetsGroup valueForProperty:ALAssetsGroupPropertyName]];
@@ -141,24 +135,20 @@
             WSAssetWrapper *assetWrapper = [[WSAssetWrapper alloc] initWithAsset:result];
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                
                 [self.fetchedAssets addObject:assetWrapper];
-                
             });
-            
         }];
     });
-
+    
     [self.tableView performSelector:@selector(reloadData) withObject:nil afterDelay:0.5];
 }
 
 #pragma mark - Actions
 
 - (void)doneButtonAction:(id)sender
-{     
+{
     self.assetPickerState.state = WSAssetPickerStatePickingDone;
 }
-
 
 #pragma mark - WSAssetsTableViewCellDelegate Methods
 
@@ -172,10 +162,11 @@
     
     WSAssetWrapper *assetWrapper = [self.fetchedAssets objectAtIndex:assetIndex];
     
-    if ((shouldSelectAsset == NO) && (assetWrapper.isSelected == NO))
+    if ((shouldSelectAsset == NO) && (assetWrapper.isSelected == NO)) {
         self.assetPickerState.state = WSAssetPickerStateSelectionLimitReached;
-    else
+    } else {
         self.assetPickerState.state = WSAssetPickerStatePickingAssets;
+    }
     
     return shouldSelectAsset;
 }
@@ -192,15 +183,14 @@
     
     // Update the state object's selectedAssets.
     [self.assetPickerState changeSelectionState:selected forAsset:assetWrapper.asset];
-
-    // Update navigation bar with selected count and limit variables 
+    
+    // Update navigation bar with selected count and limit variables
     dispatch_async(dispatch_get_main_queue(), ^{
         if (self.assetPickerState.selectionLimit) {
-            self.navigationItem.title = [NSString stringWithFormat:@"%@ (%u/%u)", [self.assetsGroup valueForProperty:ALAssetsGroupPropertyName], self.assetPickerState.selectedCount, self.assetPickerState.selectionLimit];
+            self.navigationItem.title = [NSString stringWithFormat:@"%@ (%lu/%ld)", [self.assetsGroup valueForProperty:ALAssetsGroupPropertyName], (unsigned long)self.assetPickerState.selectedCount, (long)self.assetPickerState.selectionLimit];
         }
     });
 }
-
 
 #pragma mark - Table view data source
 
@@ -210,7 +200,7 @@
 }
 
 - (NSArray *)assetsForIndexPath:(NSIndexPath *)indexPath
-{    
+{
     NSRange assetRange;
     assetRange.location = indexPath.row * self.assetsPerRow;
     assetRange.length = self.assetsPerRow;
@@ -232,10 +222,8 @@
     WSAssetsTableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:AssetCellIdentifier];
     
     if (cell == nil) {
-        
-        cell = [[WSAssetsTableViewCell alloc] initWithAssets:[self assetsForIndexPath:indexPath] reuseIdentifier:AssetCellIdentifier];        
+        cell = [[WSAssetsTableViewCell alloc] initWithAssets:[self assetsForIndexPath:indexPath] reuseIdentifier:AssetCellIdentifier];
     } else {
-        
         cell.cellAssetViews = [self assetsForIndexPath:indexPath];
     }
     cell.delegate = self;
@@ -243,14 +231,12 @@
     return cell;
 }
 
-
 #pragma mark - Table view delegate
 
-#define ROW_HEIGHT 79.0f
-
-- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath 
-{ 
-	return ROW_HEIGHT;
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    self.prototypeCell.cellAssetViews = [self assetsForIndexPath:indexPath];
+    return [self.prototypeCell cellHeight];
 }
 
 @end
